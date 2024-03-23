@@ -1,209 +1,189 @@
-# **Vehicle Detection for Autonomous Driving** 
-
-## Objective
-
-#### A demo of Vehicle Detection System: a monocular camera is used for detecting vehicles. 
-
-
-#### [**(1) Highway Drive (with Lane Departure Warning)**](https://youtu.be/Brh9-uab7Qs) (Click to see the full video)
-
-[![gif_demo1][demo1_gif]](https://youtu.be/Brh9-uab7Qs)
-
-#### [**(2) City Drive (Vehicle Detection only)**](https://youtu.be/2wOxK86LcaM) (Click to see the full video)
-[![gif_demo2][demo2_gif]](https://youtu.be/2wOxK86LcaM)
-
----
-
-### Code & Files
-
-#### 1. My project includes the following files
-
-* [main.py](main.py) is the main code for demos
-* [svm_pipeline.py](svm_pipeline.py) is the car detection pipeline with SVM
-* [yolo_pipeline.py](yolo_pipeline.py) is the car detection pipeline with a deep net [YOLO (You Only Look Once)](https://arxiv.org/pdf/1506.02640.pdf)
-* [visualization.py](visualizations.py) is the function for adding visalization
-
----
-Others are the same as in the repository of [Lane Departure Warning System](https://github.com/JunshengFu/autonomous-driving-lane-departure-warning):
-* [calibration.py](calibration.py) contains the script to calibrate camera and save the calibration results
-* [lane.py](model.h5) contains the lane class 
-* [examples](examples) folder contains the sample images and videos
-
-
-#### 2. Dependencies & my environment
-
-Anaconda is used for managing my [**dependencies**](https://github.com/udacity/CarND-Term1-Starter-Kit).
-* You can use provided [environment-gpu.yml](environment-gpu.yml) to install the dependencies.
-* OpenCV3, Python3.5, tensorflow, CUDA8  
-* OS: Ubuntu 16.04
-
-#### 3. How to run the code
-
-(1) Download weights for YOLO
-
-You can download the weight from [here](https://drive.google.com/file/d/0B5WIzrIVeL0WS3N2VklTVmstelE/view?usp=sharing&resourcekey=0-QkNPlJWkA9QsD6dHAmHXRw) and save it to
-the [weights](weights) folder.
-
-(2) If you want to run the demo, you can simply run:
-```sh
-python main.py
-```
-
-#### 4. Release History
-
-* 0.1.1
-    * Fix two minor bugs and update the documents
-    * Date 18 April 2017
-
-* 0.1.0
-    * The first proper release
-    * Date 31 March 2017
-
----
-
-### **Two approaches: Linear SVM vs Neural Network**
-
-### 1. Linear SVM Approach
-`svm_pipeline.py` contains the code for the svm pipeline.
-
-**Steps:**
-
-* Perform a Histogram of Oriented Gradients (HOG) feature extraction on a labeled training set of images and train a classifier Linear SVM classifier
-* A color transform is applied to the image and append binned color features, as well as histograms of color, to HOG feature vector. 
-* Normalize your features and randomize a selection for training and testing.
-* Implement a sliding-window technique and use SVM classifier to search for vehicles in images.
-* Run pipeline on a video stream and create a heat map of recurring detections frame by frame to reject outliers and follow detected vehicles.
-* Estimate a bounding box for detected vehicles.
-
-[//]: # (Image References)
-[image1]: ./examples/car_not_car.png
-[image2]: ./examples/hog_1.png
-[image2-1]: ./examples/hog_2.png
-[image3]: ./examples/search_windows.png
-[image4]: ./examples/heat_map1.png
-[image5]: ./examples/heat_map2.png
-[image6]: ./examples/labels_map.png
-[image7]: ./examples/svn_1.png
-[image8]: ./examples/yolo_1.png
-[image_yolo1]: ./examples/yolo1.png
-[image_yolo2]: ./examples/yolo2.png
-[video1]: ./project_video.mp4
-[demo1_gif]: ./examples/demo1.gif
-[demo2_gif]: ./examples/demo2.gif
-
-#### 1.1 Extract Histogram of Oriented Gradients (HOG) from training images
-The code for this step is contained in the function named `extract_features` and codes from line 464 to 552 in `svm_pipeline.py`. 
- If the SVM classifier exist, load it directly. 
- 
- Otherwise, I started by reading in all the `vehicle` and `non-vehicle` images, around 8000 images in each category.  These datasets are comprised of 
- images taken from the [GTI vehicle image database](http://www.gti.ssr.upm.es/data/Vehicle_database.html) and 
- [KITTI vision benchmark suite](http://www.cvlibs.net/datasets/kitti/).
- Here is an example of one of each of the `vehicle` and `non-vehicle` classes:
-
-![alt text][image1]
-
-
-I then explored different color spaces and different `skimage.hog()` parameters (`orientations`, `pixels_per_cell`, and `cells_per_block`).  I grabbed random images from each of the two classes and displayed them to get a feel for what the `skimage.hog()` output looks like.
-
-Here is an example using the `RGB` color space and HOG parameters of `orientations=9`, `pixels_per_cell=(8, 8)` and `cells_per_block=(2, 2)`:
-
-![alt text][image2]
-![alt text][image2-1]
- 
-To optimize the HoG extraction, I **extract the HoG feature for the entire image only once**. Then the entire HoG image
-is saved for further processing. (see line 319 to 321 in  `svm_pipeline.py`)
-
-#### 1.2 Final choices of HOG parameters, Spatial Features and Histogram of Color.
-
-I tried various combinations of parameters and choose the final combination as follows 
-(see line 16-27 in `svm_pipeline.py`):
-* `YCrCb` color space
-* orient = 9  # HOG orientations
-* pix_per_cell = 8 # HOG pixels per cell
-* cell_per_block = 2 # HOG cells per block, which can handel e.g. shadows
-* hog_channel = "ALL" # Can be 0, 1, 2, or "ALL"
-* spatial_size = (32, 32) # Spatial binning dimensions
-* hist_bins = 32    # Number of histogram bins
-* spatial_feat = True # Spatial features on or off
-* hist_feat = True # Histogram features on or off
-* hog_feat = True # HOG features on or off
-
-All the features are **normalized** by line 511 to 513 in `svm_pipeline.py`, which is a critical step. Otherwise, classifier 
-may have some bias toward to the features with higher weights.
-#### 1.3. How to train a classifier
-I randomly select 20% of images for testing and others for training, and a linear SVM is used as classifier (see line
-520 to 531 in `svm_pipeline.py`)
-
-#### 1.4 Sliding Window Search
-For this SVM-based approach, I use two scales of the search window (64x64 and 128x128, see line 41) and search only between 
-[400, 656] in y axis (see line 32 in `svm_pipeline.py`). I choose 75% overlap for the search windows in each scale (see 
-line 314 in `svm_pipeline.py`). 
-
-For every window, the SVM classifier is used to predict whether it contains a car nor not. If yes, save this window (see 
-line 361 to 366 in `svm_pipeline.py`). In the end, a list of windows contains detected cars are obtianed.
-
-![alt text][image3]
-
-#### 1.5 Create a heat map of detected vehicles
-After obtained a list of windows which may contain cars, a function named `generate_heatmap` (in line 565 in 
-`svm_pipeline.py`) is used to generate a heatmap. Then a threshold is used to filter out the false positives.
-
-![heatmap][image4]
-![heatmap][image5]
-
-#### 1.6 Image vs Video implementation
-**For image**, we could directly use the result from the filtered heatmap to create a bounding box of the detected 
-vehicle. 
-
-**For video**, we could further utilize neighbouring frames to filter out the false positives, as well as to smooth 
-the position of bounding box. 
-* Accumulate the heatmap for N previous frame.  
-* Apply weights to N previous frames: smaller weights for older frames (line 398 to 399 in `svm_pipeline.py`).
-* I then apply threshold and use `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap.  
-* I then assume each blob corresponded to a vehicle and constructe bounding boxes to cover the area of each blob detected.  
-
-
-#### Example of test image
-
-![alt text][image7]
-
----
-
-
-### 2. Neural Network Approach (YOLO)
-`yolo_pipeline.py` contains the code for the yolo pipeline. 
-
-[YOLO](https://arxiv.org/pdf/1506.02640.pdf) is an object detection pipeline baesd on Neural Network. Contrast to prior work on object detection with classifiers 
-to perform detection, YOLO frame object detection as a regression problem to spatially separated bounding boxes and
-associated class probabilities. A single neural network predicts bounding boxes and class probabilities directly from
-full images in one evaluation. Since the whole detection pipeline is a single network, it can be optimized end-to-end
-directly on detection performance.
-
-![alt text][image_yolo2]
-
-Steps to use the YOLO for detection:
-* resize input image to 448x448
-* run a single convolutional network on the image
-* threshold the resulting detections by the model’s confidence
-
-![alt text][image_yolo1]
-
-`yolo_pipeline.py` is modified and integrated based on this [tensorflow implementation of YOLO](https://github.com/gliese581gg/YOLO_tensorflow).
-Since the "car" is known to YOLO, I use the precomputed weights directly and apply to the entire input frame.
-
-#### Example of test image
-![alt text][image8]
-
----
-
-### Discussion
-For the SVM based approach, the accuray is good, but the speed (2 fps) is an problem due to the fact of sliding window approach 
-is time consuming! We could use image downsampling, multi-threads, or GPU processing to improve the speed. But, there are probably
-a lot engineering work need to be done to make it running real-time. Also, in this application, I limit the vertical searching 
-range to control the number of searching windows, as well as avoid some false positives (e.g. cars on the tree).
-
-For YOLO based approach, it achieves real-time and the accuracy are quite satisfactory. Only in some cases, it may failure to
- detect the small car thumbnail in distance. My intuition is that the original input image is in resolution of 1280x720, and it needs to be downscaled
- to 448x448, so the car in distance will be tiny and probably quite distorted in the downscaled image (448x448). In order to 
- correctly identify the car in distance, we might need to either crop the image instead of directly downscaling it, or retrain 
- the network.
+<div class="Box-sc-g0xbh4-0 bJMeLZ js-snippet-clipboard-copy-unpositioned" data-hpc="true"><article class="markdown-body entry-content container-lg" itemprop="text"><div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">自动驾驶车辆检测</font></font></strong></h1><a id="user-content-vehicle-detection-for-autonomous-driving" class="anchor" aria-label="永久链接：自动驾驶车辆检测" href="#vehicle-detection-for-autonomous-driving"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">客观的</font></font></h2><a id="user-content-objective" class="anchor" aria-label="永久链接：目标" href="#objective"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">车辆检测系统演示：使用单目摄像头检测车辆。</font></font></h4><a id="user-content-a-demo-of-vehicle-detection-system-a-monocular-camera-is-used-for-detecting-vehicles" class="anchor" aria-label="永久链接：车辆检测系统演示：使用单目摄像头检测车辆。" href="#a-demo-of-vehicle-detection-system-a-monocular-camera-is-used-for-detecting-vehicles"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><a href="https://youtu.be/Brh9-uab7Qs" rel="nofollow"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">(1) 高速公路行驶（带车道偏离警告）</font></font></strong></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">（点击查看完整视频）</font></font></h4><a id="user-content-1-highway-drive-with-lane-departure-warning-click-to-see-the-full-video" class="anchor" aria-label="永久链接：(1) 高速公路行驶（带车道偏离警告）（点击查看完整视频）" href="#1-highway-drive-with-lane-departure-warning-click-to-see-the-full-video"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><animated-image data-catalyst=""><a href="https://youtu.be/Brh9-uab7Qs" rel="nofollow" data-target="animated-image.originalLink" hidden=""><img src="/JunshengFu/vehicle-detection/raw/master/examples/demo1.gif" alt="gif_演示1" style="max-width: 100%;" data-target="animated-image.originalImage" hidden=""></a>
+      <span class="AnimatedImagePlayer" data-target="animated-image.player">
+        <a data-target="animated-image.replacedLink" class="AnimatedImagePlayer-images" href="https://youtu.be/Brh9-uab7Qs" target="_blank">
+          <span data-target="animated-image.imageContainer">
+            <img data-target="animated-image.replacedImage" alt="gif_演示1" class="AnimatedImagePlayer-animatedImage" src="https://github.com/JunshengFu/vehicle-detection/raw/master/examples/demo1.gif">
+          </span>
+        </a>
+        <button data-target="animated-image.imageButton" class="AnimatedImagePlayer-images" tabindex="-1"></button>
+        <span class="AnimatedImagePlayer-controls" data-target="animated-image.controls">
+          <button data-target="animated-image.playButton" class="AnimatedImagePlayer-button">
+            <svg aria-hidden="true" focusable="false" class="octicon icon-play" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 13.5427V2.45734C4 1.82607 4.69692 1.4435 5.2295 1.78241L13.9394 7.32507C14.4334 7.63943 14.4334 8.36057 13.9394 8.67493L5.2295 14.2176C4.69692 14.5565 4 14.1739 4 13.5427Z">
+            </path></svg>
+            <svg aria-hidden="true" focusable="false" class="octicon icon-pause" width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="2" width="3" height="12" rx="1"></rect>
+              <rect x="9" y="2" width="3" height="12" rx="1"></rect>
+            </svg>
+          </button>
+          <a data-target="animated-image.openButton" aria-label="在新窗口中打开" class="AnimatedImagePlayer-button" href="https://youtu.be/Brh9-uab7Qs" target="_blank">
+            <svg aria-hidden="true" class="octicon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+              <path fill-rule="evenodd" d="M10.604 1h4.146a.25.25 0 01.25.25v4.146a.25.25 0 01-.427.177L13.03 4.03 9.28 7.78a.75.75 0 01-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0110.604 1zM3.75 2A1.75 1.75 0 002 3.75v8.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0014 12.25v-3.5a.75.75 0 00-1.5 0v3.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h3.5a.75.75 0 000-1.5h-3.5z"></path>
+            </svg>
+          </a>
+        </span>
+      </span></animated-image></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><a href="https://youtu.be/2wOxK86LcaM" rel="nofollow"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">(2) City Drive（仅车辆检测）</font></font></strong></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">（点击查看完整视频）</font></font></h4><a id="user-content-2-city-drive-vehicle-detection-only-click-to-see-the-full-video" class="anchor" aria-label="永久链接：(2) City Drive（仅车辆检测）（点击查看完整视频）" href="#2-city-drive-vehicle-detection-only-click-to-see-the-full-video"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><animated-image data-catalyst=""><a href="https://youtu.be/2wOxK86LcaM" rel="nofollow" data-target="animated-image.originalLink" hidden=""><img src="/JunshengFu/vehicle-detection/raw/master/examples/demo2.gif" alt="gif_演示2" style="max-width: 100%;" data-target="animated-image.originalImage" hidden=""></a>
+      <span class="AnimatedImagePlayer" data-target="animated-image.player">
+        <a data-target="animated-image.replacedLink" class="AnimatedImagePlayer-images" href="https://youtu.be/2wOxK86LcaM" target="_blank">
+          <span data-target="animated-image.imageContainer">
+            <img data-target="animated-image.replacedImage" alt="gif_演示2" class="AnimatedImagePlayer-animatedImage" src="https://github.com/JunshengFu/vehicle-detection/raw/master/examples/demo2.gif">
+          </span>
+        </a>
+        <button data-target="animated-image.imageButton" class="AnimatedImagePlayer-images" tabindex="-1"></button>
+        <span class="AnimatedImagePlayer-controls" data-target="animated-image.controls">
+          <button data-target="animated-image.playButton" class="AnimatedImagePlayer-button">
+            <svg aria-hidden="true" focusable="false" class="octicon icon-play" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 13.5427V2.45734C4 1.82607 4.69692 1.4435 5.2295 1.78241L13.9394 7.32507C14.4334 7.63943 14.4334 8.36057 13.9394 8.67493L5.2295 14.2176C4.69692 14.5565 4 14.1739 4 13.5427Z">
+            </path></svg>
+            <svg aria-hidden="true" focusable="false" class="octicon icon-pause" width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="2" width="3" height="12" rx="1"></rect>
+              <rect x="9" y="2" width="3" height="12" rx="1"></rect>
+            </svg>
+          </button>
+          <a data-target="animated-image.openButton" aria-label="在新窗口中打开" class="AnimatedImagePlayer-button" href="https://youtu.be/2wOxK86LcaM" target="_blank">
+            <svg aria-hidden="true" class="octicon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+              <path fill-rule="evenodd" d="M10.604 1h4.146a.25.25 0 01.25.25v4.146a.25.25 0 01-.427.177L13.03 4.03 9.28 7.78a.75.75 0 01-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0110.604 1zM3.75 2A1.75 1.75 0 002 3.75v8.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0014 12.25v-3.5a.75.75 0 00-1.5 0v3.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h3.5a.75.75 0 000-1.5h-3.5z"></path>
+            </svg>
+          </a>
+        </span>
+      </span></animated-image></p>
+<hr>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">代码和文件</font></font></h3><a id="user-content-code--files" class="anchor" aria-label="永久链接：代码和文件" href="#code--files"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.我的项目包含以下文件</font></font></h4><a id="user-content-1-my-project-includes-the-following-files" class="anchor" aria-label="永久链接： 1.我的项目包含以下文件" href="#1-my-project-includes-the-following-files"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<ul dir="auto">
+<li><a href="/JunshengFu/vehicle-detection/blob/master/main.py"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">main.py</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">是demo的主要代码</font></font></li>
+<li><a href="/JunshengFu/vehicle-detection/blob/master/svm_pipeline.py"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">svm_pipeline.py</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">是带有 SVM 的汽车检测管道</font></font></li>
+<li><a href="/JunshengFu/vehicle-detection/blob/master/yolo_pipeline.py"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">yolo_pipeline.py是带有深网</font></font></a><font style="vertical-align: inherit;"><a href="https://arxiv.org/pdf/1506.02640.pdf" rel="nofollow"><font style="vertical-align: inherit;">YOLO（You Only Look Once）的</font></a><font style="vertical-align: inherit;">汽车检测管道</font></font><a href="https://arxiv.org/pdf/1506.02640.pdf" rel="nofollow"><font style="vertical-align: inherit;"></font></a></li>
+<li><a href="/JunshengFu/vehicle-detection/blob/master/visualizations.py"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Visualization.py</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">是添加visalization的函数</font></font></li>
+</ul>
+<hr>
+<p dir="auto"><font style="vertical-align: inherit;"></font><a href="https://github.com/JunshengFu/autonomous-driving-lane-departure-warning"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">其他与车道偏离警告系统</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">存储库中的相同</font><font style="vertical-align: inherit;">：</font></font></p>
+<ul dir="auto">
+<li><a href="/JunshengFu/vehicle-detection/blob/master/calibration.py"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Calibration.py</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">包含校准相机并保存校准结果的脚本</font></font></li>
+<li><a href="/JunshengFu/vehicle-detection/blob/master/model.h5"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Lane.py</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">包含车道类</font></font></li>
+<li><a href="/JunshengFu/vehicle-detection/blob/master/examples"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">示例</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">文件夹包含示例图像和视频</font></font></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">2. 依赖关系和我的环境</font></font></h4><a id="user-content-2-dependencies--my-environment" class="anchor" aria-label="永久链接：2. 依赖关系和我的环境" href="#2-dependencies--my-environment"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Anaconda 用于管理我的</font></font><a href="https://github.com/udacity/CarND-Term1-Starter-Kit"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">依赖项</font></font></strong></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">。</font></font></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">您可以使用提供的</font></font><a href="/JunshengFu/vehicle-detection/blob/master/environment-gpu.yml"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">environment-gpu.yml</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">来安装依赖项。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">OpenCV3、Python3.5、张量流、CUDA8</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">操作系统：Ubuntu 16.04</font></font></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">3.如何运行代码</font></font></h4><a id="user-content-3-how-to-run-the-code" class="anchor" aria-label="永久链接：3.如何运行代码" href="#3-how-to-run-the-code"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">(1)下载YOLO的权重</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"></font><a href="https://drive.google.com/file/d/0B5WIzrIVeL0WS3N2VklTVmstelE/view?usp=sharing&amp;resourcekey=0-QkNPlJWkA9QsD6dHAmHXRw" rel="nofollow"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">您可以从此处</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">下载权重</font><font style="vertical-align: inherit;">并将其保存到</font></font><a href="/JunshengFu/vehicle-detection/blob/master/weights"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">权重</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">文件夹中。</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">(2) 如果你想运行demo，你可以简单地运行：</font></font></p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto"><pre>python main.py</pre><div class="zeroclipboard-container">
+    <clipboard-copy aria-label="Copy" class="ClipboardButton btn btn-invisible js-clipboard-copy m-2 p-0 tooltipped-no-delay d-flex flex-justify-center flex-items-center" data-copy-feedback="Copied!" data-tooltip-direction="w" value="python main.py" tabindex="0" role="button">
+      <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-copy js-clipboard-copy-icon">
+    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path>
+</svg>
+      <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-check js-clipboard-check-icon color-fg-success d-none">
+    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
+</svg>
+    </clipboard-copy>
+  </div></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">4. 发布历史</font></font></h4><a id="user-content-4-release-history" class="anchor" aria-label="永久链接：4. 发布历史记录" href="#4-release-history"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<ul dir="auto">
+<li>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">0.1.1</font></font></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">修复两个小bug并更新文档</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">日期 2017 年 4 月 18 日</font></font></li>
+</ul>
+</li>
+<li>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">0.1.0</font></font></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">第一次正确发布</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">日期 2017 年 3 月 31 日</font></font></li>
+</ul>
+</li>
+</ul>
+<hr>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">两种方法：线性 SVM 与神经网络</font></font></strong></h3><a id="user-content-two-approaches-linear-svm-vs-neural-network" class="anchor" aria-label="永久链接：两种方法：线性 SVM 与神经网络" href="#two-approaches-linear-svm-vs-neural-network"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1. 线性SVM方法</font></font></h3><a id="user-content-1-linear-svm-approach" class="anchor" aria-label="永久链接：1.线性SVM方法" href="#1-linear-svm-approach"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">包含 svm 管道的代码。</font></font></p>
+<p dir="auto"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">脚步：</font></font></strong></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对带标签的图像训练集执行定向梯度直方图 (HOG) 特征提取并训练分类器 线性 SVM 分类器</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对图像应用颜色变换，并将分箱颜色特征以及颜色直方图附加到 HOG 特征向量。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">标准化您的特征并随机选择训练和测试。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">实现滑动窗口技术并使用 SVM 分类器来搜索图像中的车辆。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">在视频流上运行管道，并逐帧创建重复检测的热图，以拒绝异常值并跟踪检测到的车辆。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">估计检测到的车辆的边界框。</font></font></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.1 从训练图像中提取定向梯度直方图（HOG）</font></font></h4><a id="user-content-11-extract-histogram-of-oriented-gradients-hog-from-training-images" class="anchor" aria-label="永久链接：1.1 从训练图像中提取定向梯度直方图（HOG）" href="#11-extract-histogram-of-oriented-gradients-hog-from-training-images"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">此步骤的代码包含</font></font><code>extract_features</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">在</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">. </font><font style="vertical-align: inherit;">如果SVM分类器存在，则直接加载。</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">除此之外，我首先阅读所有</font></font><code>vehicle</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">和</font></font><code>non-vehicle</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">图像，每个类别大约 8000 张图像。</font></font><a href="http://www.gti.ssr.upm.es/data/Vehicle_database.html" rel="nofollow"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">这些数据集由取自GTI 车辆图像数据库</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">和
+</font></font><a href="http://www.cvlibs.net/datasets/kitti/" rel="nofollow"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">KITTI 视觉基准套件</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">的图像组成</font><font style="vertical-align: inherit;">。</font></font><code>vehicle</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">以下是每个和类</font><font style="vertical-align: inherit;">之一的示例</font></font><code>non-vehicle</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">：</font></font></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/car_not_car.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/car_not_car.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">然后我探索了不同的色彩空间和不同的</font></font><code>skimage.hog()</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">参数（</font></font><code>orientations</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">、</font></font><code>pixels_per_cell</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">和</font></font><code>cells_per_block</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）。</font><font style="vertical-align: inherit;">我从两个类中的每一个中抓取了随机图像并显示它们以了解输出的样子</font></font><code>skimage.hog()</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">。</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">以下是使用、</font><font style="vertical-align: inherit;">和 的</font></font><code>RGB</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">颜色空间和 HOG 参数的</font><font style="vertical-align: inherit;">示例</font><font style="vertical-align: inherit;">：</font></font><code>orientations=9</code><font style="vertical-align: inherit;"></font><code>pixels_per_cell=(8, 8)</code><font style="vertical-align: inherit;"></font><code>cells_per_block=(2, 2)</code><font style="vertical-align: inherit;"></font></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/hog_1.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/hog_1.png" alt="替代文本" style="max-width: 100%;"></a>
+<a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/hog_2.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/hog_2.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">为了优化HoG提取，我</font></font><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">只为整个图像提取一次HoG特征</font></font></strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">。</font><font style="vertical-align: inherit;">然后保存整个 HoG 图像以供进一步处理。</font><font style="vertical-align: inherit;">（参见第 319 至 321 行  </font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）</font></font></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.2 HOG参数、空间特征和颜色直方图的最终选择。</font></font></h4><a id="user-content-12-final-choices-of-hog-parameters-spatial-features-and-histogram-of-color" class="anchor" aria-label="永久链接：1.2 HOG 参数、空间特征和颜色直方图的最终选择。" href="#12-final-choices-of-hog-parameters-spatial-features-and-histogram-of-color"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">我尝试了各种参数组合并选择最终组合如下（参见第 16-27 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）：</font></font></p>
+<ul dir="auto">
+<li><code>YCrCb</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">色彩空间</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">orient = 9 # HOG 方向</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">pix_per_cell = 8 # 每个单元的 HOG 像素</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">cell_per_block = 2 # 每个块的 HOG 单元，可以处理阴影等</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">hog_channel = "ALL" # 可以是 0、1、2 或 "ALL"</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Spatial_size = (32, 32) # 空间分箱维度</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">hist_bins = 32 # 直方图箱的数量</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Spatial_feat = True # 空间特征打开或关闭</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">hist_feat = True # 直方图功能打开或关闭</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">hog_feat = True # HOG 功能打开或关闭</font></font></li>
+</ul>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">所有特征</font><font style="vertical-align: inherit;">均由 中的第 511 至 513 行</font></font><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">进行归一化</font></font></strong><font style="vertical-align: inherit;"></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">，这是关键的一步。</font><font style="vertical-align: inherit;">否则，分类器可能会对权重较高的特征有一定的偏向。</font></font></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.3. </font><font style="vertical-align: inherit;">如何训练分类器</font></font></h4><a id="user-content-13-how-to-train-a-classifier" class="anchor" aria-label="永久链接：1.3。 如何训练分类器" href="#13-how-to-train-a-classifier"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">我随机选择 20% 的图像进行测试，其他图像进行训练，并使用线性 SVM 作为分类器（参见 中的第 520 到 531 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）</font></font></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.4 滑动窗口搜索</font></font></h4><a id="user-content-14-sliding-window-search" class="anchor" aria-label="永久链接：1.4 滑动窗口搜索" href="#14-sliding-window-search"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于这种基于 SVM 的方法，我使用两个尺度的搜索窗口（64x64 和 128x128，请参见第 41 行），并且仅在 y 轴的 [400, 656] 之间搜索（请参见 中的第 32 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）。</font><font style="vertical-align: inherit;">我为每个尺度的搜索窗口选择 75% 的重叠（参见 中的第 314 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）。</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于每个窗口，SVM 分类器用于预测它是否包含汽车。</font><font style="vertical-align: inherit;">如果是，则保存该窗口（参见 中的第 361 至 366 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）。</font><font style="vertical-align: inherit;">最后，获得包含检测到的汽车的窗口列表。</font></font></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/search_windows.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/search_windows.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.5 创建检测车辆的热图</font></font></h4><a id="user-content-15-create-a-heat-map-of-detected-vehicles" class="anchor" aria-label="永久链接：1.5 创建检测到的车辆的热图" href="#15-create-a-heat-map-of-detected-vehicles"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">在获得可能包含汽车的窗口列表后，</font><font style="vertical-align: inherit;">使用名为</font></font><code>generate_heatmap</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">（在第 565 行中
+）的函数来生成热图。</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">然后使用阈值来过滤掉误报。</font></font></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/heat_map1.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/heat_map1.png" alt="热图" style="max-width: 100%;"></a>
+<a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/heat_map2.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/heat_map2.png" alt="热图" style="max-width: 100%;"></a></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">1.6 图像与视频实现</font></font></h4><a id="user-content-16-image-vs-video-implementation" class="anchor" aria-label="永久链接：1.6 图像与视频实现" href="#16-image-vs-video-implementation"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于 image</font></font></strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">，我们可以直接使用过滤热图的结果来创建检测到的车辆的边界框。</font></font></p>
+<p dir="auto"><strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于视频</font></font></strong><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">，我们可以进一步利用相邻帧来过滤误报，以及平滑边界框的位置。</font></font></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">累积前 N 帧的热图。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">将权重应用于 N 个先前帧：较旧的帧使用较小的权重（第 398 至 399 行</font></font><code>svm_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">）。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">然后，我应用阈值并用于</font></font><code>scipy.ndimage.measurements.label()</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">识别热图中的各个斑点。</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">然后，我假设每个斑点对应于一辆车辆，并构造边界框以覆盖检测到的每个斑点的区域。</font></font></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">测试图像示例</font></font></h4><a id="user-content-example-of-test-image" class="anchor" aria-label="永久链接：测试图像示例" href="#example-of-test-image"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/svn_1.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/svn_1.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<hr>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">2. 神经网络方法（YOLO）</font></font></h3><a id="user-content-2-neural-network-approach-yolo" class="anchor" aria-label="永久链接：2.神经网络方法（YOLO）" href="#2-neural-network-approach-yolo"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><code>yolo_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">包含 yolo 管道的代码。</font></font></p>
+<p dir="auto"><a href="https://arxiv.org/pdf/1506.02640.pdf" rel="nofollow"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">YOLO</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">是一个基于神经网络的目标检测管道。</font><font style="vertical-align: inherit;">与之前使用分类器执行检测的对象检测工作相比，YOLO 将对象检测视为空间分离的边界框和相关类概率的回归问题。</font><font style="vertical-align: inherit;">单个神经网络在一次评估中直接从完整图像预测边界框和类别概率。</font><font style="vertical-align: inherit;">由于整个检测管道是单个网络，因此可以直接在检测性能上进行端到端优化。</font></font></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/yolo2.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/yolo2.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">使用YOLO进行检测的步骤：</font></font></p>
+<ul dir="auto">
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">将输入图像大小调整为 448x448</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">在图像上运行单个卷积网络</font></font></li>
+<li><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">根据模型的置信度设置检测结果的阈值</font></font></li>
+</ul>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/yolo1.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/yolo1.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<p dir="auto"><code>yolo_pipeline.py</code><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">是基于</font></font><a href="https://github.com/gliese581gg/YOLO_tensorflow"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">YOLO的这个tensorflow实现</font></font></a><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">进行修改和集成的。</font><font style="vertical-align: inherit;">由于 YOLO 已知“汽车”，因此我直接使用预先计算的权重并将其应用于整个输入帧。</font></font></p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">测试图像示例</font></font></h4><a id="user-content-example-of-test-image-1" class="anchor" aria-label="永久链接：测试图像示例" href="#example-of-test-image-1"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="/JunshengFu/vehicle-detection/blob/master/examples/yolo_1.png"><img src="/JunshengFu/vehicle-detection/raw/master/examples/yolo_1.png" alt="替代文本" style="max-width: 100%;"></a></p>
+<hr>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">讨论</font></font></h3><a id="user-content-discussion" class="anchor" aria-label="永久链接：讨论" href="#discussion"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于基于 SVM 的方法，精度很好，但速度（2 fps）是一个问题，因为滑动窗口方法非常耗时！</font><font style="vertical-align: inherit;">我们可以使用图像下采样、多线程或 GPU 处理来提高速度。</font><font style="vertical-align: inherit;">但是，可能需要完成很多工程工作才能使其实时运行。</font><font style="vertical-align: inherit;">另外，在这个应用程序中，我限制垂直搜索范围以控制搜索窗口的数量，并避免一些误报（例如树上的汽车）。</font></font></p>
+<p dir="auto"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">对于基于YOLO的方法，它实现了实时性并且准确率相当令人满意。</font><font style="vertical-align: inherit;">仅在某些情况下，可能无法检测到远处的小车缩略图。</font><font style="vertical-align: inherit;">我的直觉是，原始输入图像的分辨率为 1280x720，需要缩小到 448x448，因此远处的汽车会很小，并且在缩小后的图像 (448x448) 中可能会相当扭曲。</font><font style="vertical-align: inherit;">为了正确识别远处的汽车，我们可能需要裁剪图像而不是直接缩小图像，或者重新训练网络。</font></font></p>
+</article></div>
